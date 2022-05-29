@@ -1,0 +1,34 @@
+[package]
+name = "actmd"
+version = "0.1.0"
+authors = ["Jörg Sommer <joerg@jo-so.de>"]
+edition = "2021"
+description = "A parser and output generator for Markdown-like documents"
+keywords = ["markdown", "md", "commonmark", "parser", "AST"]
+categories = ["parser-implementations", "template-engine"]
+repository = "https://gitlab.com/jo-so/actmd"
+license = "Apache-2.0"
+
+[workspace]
+members = [
+  "build-html-entities",
+  "build-spec-tests",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitflags = "1.0.0"
+lazy_static = "1.4.0"
+log = { version = "0.4.16", optional = true }
+regex = "1.5.4"
+serde = { version = "1.0.127", features = ["derive"], optional = true }
+typemap = "0.3.0"
+url = "2.0.0"
+
+[dev-dependencies]
+env_logger = "0.9.0"
+actmd = { path = ".", features = ["log"] }
+
+[features]
+location = []
