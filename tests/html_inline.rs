@@ -23,7 +23,7 @@ mod cdata {
         invalid_start_1,
         "<![ data ]]>",
         plain!(<0, 1> "<"),
-        imageref!(plain!(<3, 9> " data ")),
+        imageref!(<0, 0> plain!(<3, 9> " data ")),
         plain!(<10, 12> "]>")
     );
 
@@ -31,7 +31,7 @@ mod cdata {
         invalid_start_2,
         "<![CDATA data ]]>",
         plain!(<0, 1> "<"),
-        imageref!(plain!(<3, 14> "CDATA data ")),
+        imageref!(<0, 0> plain!(<3, 14> "CDATA data ")),
         plain!(<15, 17> "]>")
     );
 
@@ -40,7 +40,7 @@ mod cdata {
         invalid_start_3,
         "<![cdata[ data ]]>",
         plain!(<0, 1> "<"),
-        imageref!(plain!(<3, 8> "cdata"), linkref!(plain!(<9, 15> " data "))),
+        imageref!(<0, 0> plain!(<3, 8> "cdata"), linkref!(<0, 0> plain!(<9, 15> " data "))),
         plain!(<17, 18> ">")
     );
 }

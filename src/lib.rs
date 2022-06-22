@@ -1,9 +1,7 @@
-#![feature(assert_matches)]
-#![feature(label_break_value)]
-#![feature(never_type)]
+#![cfg_attr(test, feature(assert_matches))]
 
 use std::{
-    convert::TryFrom,
+    convert::{Infallible, TryFrom},
     fs,
     io,
     ops::{Add, Sub},
@@ -75,7 +73,7 @@ macro_rules! log {
 
 /// Whitespace within a line
 pub static LINE_WS : [char; 2] = [' ', '\t'];
-/// New line \n, Carriage return \r
+/// New line `\n`, Carriage return `\r`
 pub static NL_CR : [char; 2] = ['\n', '\r'];
 
 pub type Position = usize;
@@ -114,6 +112,7 @@ mod ps_help {
     }
 
     impl ParserSettings {
+        #[must_use]
         pub fn common_mark() -> Self {
             ParserSettings::Html
         }
@@ -141,7 +140,7 @@ impl ParserData for &mut dyn ParserData {
     }
 
     fn advance(&mut self) {
-        (**self).advance()
+        (**self).advance();
     }
 
     fn pos(&self) -> Position {
@@ -153,8 +152,8 @@ impl ParserData for &mut dyn ParserData {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[cfg_attr(all(feature = "serde", feature = "location"), derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "location"), derive(Default))]
 pub struct LocationPosition(
     #[cfg(feature = "location")]
     pub Position
@@ -165,13 +164,6 @@ pub struct LocationPosition(
 impl Default for LocationPosition {
     fn default() -> Self {
         LocationPosition(0)
-    }
-}
-
-#[cfg(not(feature = "location"))]
-impl Default for LocationPosition {
-    fn default() -> Self {
-        LocationPosition()
     }
 }
 
@@ -243,21 +235,11 @@ impl From<usize> for LocationPosition {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(all(feature = "serde", feature = "location"), derive(serde::Deserialize, serde::Serialize))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "location"), derive(Default))]
 pub struct Location {
     pub begin: LocationPosition,
     pub end: LocationPosition,
-}
-
-#[cfg(not(feature = "location"))]
-impl Default for Location {
-    fn default() -> Self {
-        Self {
-            begin: Default::default(),
-            end: Default::default(),
-        }
-    }
 }
 
 #[cfg(feature = "location")]
@@ -287,135 +269,116 @@ impl<T: ParserData> LocationHelper for T {
 
 /// Top level elements of a document
 #[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum Block {
-    /// A headline `Heading(level, content)`
-    Heading(
-        u8,
-        Vec<Inline>,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Headline `# ...` (`level, content, location`)
+    Heading(u8, Vec<Inline>, Location),
 
-    Paragraph(
-        Vec<Inline>,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Paragraph (`content, location`)
+    Paragraph(Vec<Inline>, Location),
 
-    Quote(
-        Vec<Block>,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Quotation `> ...` (`content, location`)
+    Quote(Vec<Block>, Location),
 
-    /// Code block (info, content)
-    // ```info
-    // …
-    // ```
-    Code(
-        String,
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Fenced code block ```` ```info... ```` (`info, content, location`)
+    Code(String, String, Location),
 
+    /// Ordered list `1. ...` (`start, content`)
     OrderedList(String, Vec<Vec<Block>>),
+
+    /// Unordered list `* ...` (`content`)
     UnorderedList(Vec<Vec<Block>>),
 
-    Html(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// HTML section (`content, location`)
+    Html(String, Location),
 
-    /// Thematic break <hr/>
+    /// Thematic break `* * *`
+    ///
+    /// In HTML rendered as `<hr/>`
     Break,
 
-    /// `LinkDef(label, url, title)` used for `Inline::ImageRef` and `Inline::LinkRef`
-    LinkDef(String, String, String),
+    /// Link definition (`label, url, title, location`)
+    ///
+    /// Used to resolve [`Inline::ImageRef`] and [`Inline::LinkRef`]
+    LinkDef(String, String, String, Location),
 
-    /// @{...}
-    EmbeddedBlock(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Embedded code block `@{...}`
+    ///
+    /// This block contains a block of statements that should be evaluated on
+    /// output generation.
+    EmbeddedBlock(String, Location),
 
-    /// @(...)
-    EmbeddedExpr(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Embedded expression `@(...)`
+    ///
+    /// The expression returns a value that should be included in the output.
+    EmbeddedExpr(String, Location),
 }
 
 #[derive(Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub enum Inline {
-    Plain(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// Plain text
+    Text(String, Location),
 
-    Html(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
+    /// HTML tag `<...>` in a paragraph
+    Html(String, Location),
 
-    Code(String),
+    /// Code segment `` `...` `` in a paragraph
+    Code(String, Location),
 
+    /// Common break between lines
+    ///
+    /// This should not influence the rendering. See also [HardBreak]
     SoftBreak,
+
+    /// A special marked linebreak `...\`
+    ///
+    /// This should create an visual linebreak in the output.
     HardBreak,
 
+    /// Emphasized section
     Emph(Vec<Inline>),
+
+    /// Stronger emphasized section
     Strong(Vec<Inline>),
-
-    /// @{...}
-    EmbeddedBlock(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
-
-    /// @(...)
-    EmbeddedExpr(
-        String,
-        #[cfg_attr(all(feature = "serde", not(feature = "location")), serde(skip))]
-        Location,
-    ),
 
     /// `Image(description/alt text, src url, title)`
     ///
     /// * `![1](2 "3")` => `Image(1, 2, 3)`
     /// * `![1](2)` => `Image(1, 2, "")`
-    Image(Vec<Inline>, String, String),
+    Image(Vec<Inline>, String, String, Location),
 
     /// `ImageRef(description, label)` (must be resolved with Block::LinkDef)
     ///
     /// * `![1][2]` => `ImageRef(1, 2)`
     /// * `![1][]` => `ImageRef(1, "")`
     /// * `![1]` => `ImageRef(1, "")`
-    ImageRef(Vec<Inline>, String),
+    ImageRef(Vec<Inline>, String, Location),
 
     /// `Link(link text, url, title)`
     ///
     /// * `[1](2 "3")` => `Link(1, 2, 3)`
     /// * `[1](2)` => `Link(1, 2, "")`
-    Link(Vec<Inline>, String, String),
+    Link(Vec<Inline>, String, String, Location),
 
     /// `LinkRef(text, label)` (must be resolved with Block::LinkDef)
     ///
     /// * `[1][2]` => `LinkRef(1, 2)`
     /// * `[1][]` => `LinkRef(1, "")`
     /// * `[1]` => `LinkRef(1, "")`
-    LinkRef(Vec<Inline>, String),
+    LinkRef(Vec<Inline>, String, Location),
+
+    /// Embedded code block `@{...}`
+    ///
+    /// This block contains a block of statements that should be evaluated on
+    /// output generation.
+    EmbeddedBlock(String, Location),
+
+    /// Embedded expression `@(...)`
+    ///
+    /// The expression returns a value that should be included in the output.
+    EmbeddedExpr(String, Location),
 }
 
 #[derive(Default)]
-#[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct Document {
     src: Box<str>,
     head: Vec<(Box<str>, Box<str>)>,
@@ -423,6 +386,7 @@ pub struct Document {
 }
 
 impl Document {
+    #[must_use]
     pub fn parse_with(
         src: impl Into<Box<str>>,
         data: &mut impl ParserData,
@@ -439,6 +403,7 @@ impl Document {
         }
     }
 
+    #[must_use]
     pub fn parse(src: impl Into<Box<str>>, data: &mut impl ParserData) -> Self {
         Self::parse_with(src, data, Vec::new())
     }
@@ -459,11 +424,8 @@ impl Document {
         self.head.push((key, value));
     }
 
-    pub fn head_retain(
-        &mut self,
-        f: impl FnMut(&(Box<str>, Box<str>)) -> bool
-    ) {
-        self.head.retain(f)
+    pub fn head_retain(&mut self, f: impl FnMut(&(Box<str>, Box<str>)) -> bool) {
+        self.head.retain(f);
     }
 
     pub fn last_head_val(&self, key: &str) -> Option<&str> {
@@ -484,7 +446,7 @@ impl Document {
 }
 
 impl FromStr for Document {
-    type Err = !;
+    type Err = Infallible;
 
     fn from_str(inp: &str) -> Result<Self, Self::Err> {
         Ok(Self::parse("(from str)", &mut StringData::from(inp)))
@@ -516,9 +478,9 @@ pub fn head(data: &mut impl ParserData, header: &mut Vec<(Box<str>, Box<str>)>) 
 
             if data.skip_newline() {
                 continue;
-            } else {
-                break;
             }
+
+            break;
         }
 
         if !data.looking_at(char::is_alphanumeric) {
@@ -593,7 +555,7 @@ fn html_entity(data: &mut impl ParserData, buf: &mut String) {
         buf.push('#');
 
         match data.next() {
-            Some(c @ 'x') | Some(c @ 'X') => {
+            Some(c @ ('x' | 'X')) => {
                 buf.push(c);
 
                 while let Some(c) = data.next() {
@@ -681,4 +643,8 @@ fn html_entity(data: &mut impl ParserData, buf: &mut String) {
 
 fn is_ascii_alphabetic(ch: char) -> bool {
     char::is_ascii_alphabetic(&ch)
+}
+
+fn is_ascii_alphanumeric(ch: char) -> bool {
+    char::is_ascii_alphanumeric(&ch)
 }

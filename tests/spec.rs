@@ -21,7 +21,7 @@ fn space2tab(mut body: Vec<Block>) -> Vec<Block> {
             Block::Paragraph(par, _) => {
                 par.iter_mut().for_each(|e| {
                     match e {
-                        Inline::Code(txt) => *txt = txt.replace(' ', "\t"),
+                        Inline::Code(txt, _) => *txt = txt.replace(' ', "\t"),
                         _ => (),
                     }
                 })

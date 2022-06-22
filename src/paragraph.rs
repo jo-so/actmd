@@ -74,10 +74,10 @@ impl Paragraph {
     fn push_plain(&mut self, plain_begin: LocationPosition) {
         if !self.plain.is_empty() {
             let begin = mem::replace(&mut self.plain_begin, plain_begin);
-            // let end = begin + self.plain.len();
+            // TODO: let end = begin + self.plain.len();
             let end = plain_begin;
 
-            let el = I::Plain(mem::take(&mut self.plain), Location { begin, end });
+            let el = I::Text(mem::take(&mut self.plain), Location { begin, end });
 
             log!(t, "paragraph", "adding {:?}", el);
             self.list.push(el);
@@ -93,12 +93,12 @@ impl Paragraph {
         if !self.plain.is_empty() {
             let end = self.plain_begin + self.plain.len();
 
-            list.push(I::Plain(
+            list.push(I::Text(
                 self.plain,
                 Location {
                     begin: self.plain_begin,
                     end,
-                }
+                },
             ));
         }
 
@@ -131,7 +131,7 @@ pub fn paragraph(data: &mut impl ParserData, stop_on_emb_end: bool) -> Block {
             '`' => {
                 let loc = data.loc();
                 if let Some(code) = code(data) {
-                    par.push(I::Code(code), loc);
+                    par.push(I::Code(code, data.loc_end(loc)), loc);
                     par.plain_begin = data.loc();
                 } else {
                     data.copy_all(&mut par.plain, '`');
@@ -141,12 +141,7 @@ pub fn paragraph(data: &mut impl ParserData, stop_on_emb_end: bool) -> Block {
             '<' => {
                 if let Some((url, txt, loc, inner_loc)) = autourl(data) {
                     par.push(
-                        I::Link(
-                            vec![I::Plain(txt, inner_loc)],
-                            url,
-                            String::new(),
-                            // TODO: loc
-                        ),
+                        I::Link(vec![I::Text(txt, inner_loc)], url, String::new(), loc),
                         data.loc()
                     );
                 } else if !data.has_setting(ParserSettings::Html) {
@@ -158,7 +153,7 @@ pub fn paragraph(data: &mut impl ParserData, stop_on_emb_end: bool) -> Block {
                     if let Some(html) = html(data) {
                         par.push_plain(plain_end);
                         par.list.extend(html);
-                        par.plain_begin = data.loc()
+                        par.plain_begin = data.loc();
                     } else {
                         par.push_char('<');
                         data.advance();
@@ -249,7 +244,7 @@ pub fn paragraph(data: &mut impl ParserData, stop_on_emb_end: bool) -> Block {
 
                 match data.peek() {
                     // https://spec.commonmark.org/0.29/#hard-line-breaks
-                    Some('\r') | Some('\n') => {
+                    Some('\r' | '\n') => {
                         data.skip_newline();
 
                         if data.peek().is_none() {
@@ -343,7 +338,7 @@ fn autourl(data: &mut impl ParserData) -> Option<(String, String, Location, Loca
 
                 let pos = url.len();
                 colon_pos = Some(pos);
-                if pos < 2 || pos > 32 {
+                if pos < 2 || 32 < pos {
                     // schema to short or to long
                     is_url = false;
                 }
@@ -441,7 +436,7 @@ fn clip_segment(
 
     impl AsPlain for I {
         fn as_plain(&mut self) -> (&mut String, &mut Location) {
-            if let I::Plain(txt, loc) = self {
+            if let I::Text(txt, loc) = self {
                 (txt, loc)
             } else {
                 unreachable!("Found {:?} instead of Plain", self);
@@ -495,7 +490,7 @@ fn clip_segment(
         };
         loc.end = loc.begin + start.1;
 
-        let mut content = vec![ I::Plain(plain, plain_loc) ];
+        let mut content = vec![ I::Text(plain, plain_loc) ];
         if let Some(end) = end {
             if start.0 + 1 < end {
                 content.extend(inlines.drain(start.0 + 1 .. end));
@@ -674,7 +669,7 @@ pub(crate) fn embedded(data: &mut impl ParserData, foo: bool) -> Option<(Embedde
                         buf.push('(');
 
                         if data.copy_until_match(&mut buf, '(', ')') {
-                            Some((Embedded::Expr(buf), data.loc_end(loc_begin)))
+                            Some((Embedded::Block(buf, 0), data.loc_end(loc_begin)))
                         } else {
                             data.reset(pos).unwrap();
                             buf.pop();
@@ -703,7 +698,7 @@ fn emph(par: &mut Paragraph, data: &mut impl ParserData) {
      */
 
     let delim_ch = match data.peek() {
-        Some(c @ '*') | Some(c @ '_') => c,
+        Some(c @ ('*' | '_')) => c,
         x => unreachable!("Invalid start of emph: {:?}", x),
     };
 
@@ -867,7 +862,7 @@ fn emph_end(
         }
 
         match &par.open_brackets[idx] {
-            Emph(E::Start, _, s, l) | Emph(E::Both, _, s, l) => {
+            Emph(E::Start | E::Both, _, s, l) => {
                 opening_pos = *s;
                 opening_len = *l;
             }
@@ -955,9 +950,7 @@ fn html(data: &mut impl ParserData) -> Option<Vec<Inline>> {
         () => (
             if !html.is_empty() {
                 log!(t, data, "inline html", "adding HTML");
-                list.push(Inline::Html(
-                    mem::take(&mut html), data.loc_end(loc_begin)
-                ));
+                list.push(Inline::Html(mem::take(&mut html), data.loc_end(loc_begin)));
             }
         );
 
@@ -1093,7 +1086,7 @@ fn html(data: &mut impl ParserData) -> Option<Vec<Inline>> {
                         log!(t, data, "inline html", "value begin");
 
                         match unwrap!(data.peek()) {
-                            ch @ '"' | ch @ '\'' => {
+                            ch @ ('"' | '\'') => {
                                 html.push(ch);
                                 data.advance();
 

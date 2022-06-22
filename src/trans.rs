@@ -42,7 +42,7 @@ impl<D: ParserData> ParserData for Transaction<'_, D> {
     }
 
     fn advance(&mut self) {
-        self.inner_mut().advance()
+        self.inner_mut().advance();
     }
 
     fn pos(&self) -> Position {

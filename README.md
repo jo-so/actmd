@@ -166,3 +166,7 @@ On stack size of thin_str::ThinStr               : 8
 
 Prüfen, ob der Einsatz von [lazy-regex](https://lib.rs/crates/lazy-regex)
 sinnvoll ist.
+
+### Performance messen
+
+[Criterion.rs](https://bheisler.github.io/criterion.rs/book/criterion_rs.html)

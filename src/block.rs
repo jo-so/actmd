@@ -1,5 +1,3 @@
-use crate::log;
-
 use std::{
     convert::TryFrom,
     mem,
@@ -22,6 +20,8 @@ use super::{
     body,
     html_entity,
     is_ascii_alphabetic,
+    is_ascii_alphanumeric,
+    log,
     paragraph::{self, paragraph},
 };
 
@@ -60,7 +60,7 @@ pub fn block(
         }
 
         fn pos(&self) -> Position {
-            self.stop_pos.unwrap_or(self.inner.pos())
+            self.stop_pos.unwrap_or_else(|| self.inner.pos())
         }
 
         fn peek(&self) -> Option<char> {
@@ -160,9 +160,9 @@ pub fn block(
 
                             if data.looking_at(LINE_WS) {
                                 stop!();
-                                data.reset(after_newline).unwrap()
+                                data.reset(after_newline).unwrap();
                             } else {
-                                data.reset(pos).unwrap()
+                                data.reset(pos).unwrap();
                             }
                         }
 
@@ -174,7 +174,7 @@ pub fn block(
                                 stop!();
                                 data.reset(after_newline).unwrap();
                             } else {
-                                data.reset(pos).unwrap()
+                                data.reset(pos).unwrap();
                             }
                         }
 
@@ -209,7 +209,7 @@ pub fn block(
 
         match data.peek() {
             None => return,
-            Some('\n') | Some('\r') => continue,
+            Some('\n' | '\r') => continue,
             Some(c) => break (c, indent),
         }
     };
@@ -328,7 +328,7 @@ pub fn block(
 
 fn code_fenced(data: &mut impl ParserData, indent: usize) -> Option<(String, String, Location)> {
     let fence_char = match data.peek() {
-        Some(c @ '`') | Some(c @ '~') => c,
+        Some(c @ ('`' | '~')) => c,
         _ => return None,
     };
 
@@ -353,7 +353,7 @@ fn code_fenced(data: &mut impl ParserData, indent: usize) -> Option<(String, Str
                 return Some((info, String::new(), loc));
             }
 
-            Some('\r') | Some('\n') => {
+            Some('\r' | '\n') => {
                 data.skip_newline();
                 break;
             }
@@ -466,12 +466,12 @@ fn embedded(data: &mut impl ParserData, open_embedded_codes: &mut u16) -> Option
             log!(d, data, "embedded block", "end with plain");
 
             return Some(Block::Paragraph(
-                vec![Inline::Plain("@".into(), data.loc_end(loc_begin))],
+                vec![Inline::Text("@".into(), data.loc_end(loc_begin))],
                 data.loc_end(loc_begin),
             ));
         }
 
-        Some('\r') | Some('\n') => {
+        Some('\r' | '\n') => {
             data.skip_newline();
             data.skip_all(LINE_WS);
 
@@ -677,7 +677,7 @@ fn heading(data: &mut impl ParserData) -> Option<(u8, Vec<Inline>, Location)> {
             data.skip_newline();
 
             log!(d, data, "heading", "end");
-            (vec![Inline::Plain(buf, inner_loc)], loc)
+            (vec![Inline::Text(buf, inner_loc)], loc)
         }
 
         x => unreachable!("{:?}", x),
@@ -812,7 +812,7 @@ fn html(
     }
 
     let start_len = buf.len();
-    if data.copy_all(&mut buf, is_ascii_alphabetic) == 0 {
+    if data.copy_all(&mut buf, is_ascii_alphanumeric) == 0 {
         if is_closing_tag {
             // a closing tag must have an attribute name
             log!(w, data, "html block", "end without match");
@@ -912,7 +912,7 @@ fn html(
             if space_after_name {
                 loop {
                     match data.peek() {
-                        Some('/') | Some('>') => break,
+                        Some('/' | '>') => break,
 
                         Some(c) if c.is_ascii_alphabetic() || c == '_' || c == ':' => (),
 
@@ -933,10 +933,10 @@ fn html(
                         if space_after_name {
                             // go for the next attribute
                             continue;
-                        } else {
-                            // we should have reached the tag end ... check the end
-                            break;
                         }
+
+                        // we should have reached the tag end ... check the end
+                        break;
                     }
 
                     data.skip_all(' ');
@@ -948,7 +948,7 @@ fn html(
                             return false;
                         }
 
-                        Some(ch @ '"') | Some(ch @ '\'') => {
+                        Some(ch @ ('"' | '\'')) => {
                             data.advance();
                             data.skip_all(|c| c != ch && c != '\r' && c != '\n');
 
@@ -1004,13 +1004,13 @@ fn list_items(
 ) -> Option<Vec<Vec<Block>>> {
     if data.peek().is_none() {
         log!(d, data, "list items", "end");
-        return Some(vec![ Vec::with_capacity(0) ]);
+        return Some(vec![ Vec::new() ]);
     }
 
     if data.skip_newline() {
         if data.peek().is_none() || data.skip_newline() {
             log!(d, data, "list items", "end");
-            return Some(vec![ Vec::with_capacity(0) ]);
+            return Some(vec![ Vec::new() ]);
         }
 
         if !data.skip(LINE_WS) {
@@ -1120,7 +1120,7 @@ fn list_items(
             }
 
             if data.peek().is_none() {
-                list.push(Vec::with_capacity(0));
+                list.push(Vec::new());
                 break;
             }
 
@@ -1230,7 +1230,7 @@ fn quote(data: &mut impl ParserData) -> Option<(Vec<Block>, Location)> {
                     self.inner.skip(LINE_WS);
                 }
 
-                Some(' ') | Some('\t') if NL_CR.matches(prev) => {
+                Some(' ' | '\t') if NL_CR.matches(prev) => {
                     let start_pos = self.inner.pos();
                     self.inner.skip_all(LINE_WS);
 
@@ -1273,7 +1273,7 @@ fn quote(data: &mut impl ParserData) -> Option<(Vec<Block>, Location)> {
 
 fn thematic_break(data: &mut impl ParserData) -> bool {
     let marker = match data.peek() {
-        Some(c @ '*') | Some(c @ '-') | Some(c @ '_') => c,
+        Some(c @ ('*' | '-' | '_')) => c,
         _ => return false,
     };
 
@@ -1294,11 +1294,10 @@ fn thematic_break(data: &mut impl ParserData) -> bool {
 
                 data.commit();
                 return true;
-            } else {
-                log!(w, data, "thematic break", "end without match");
-
-                return false;
             }
+
+            log!(w, data, "thematic break", "end without match");
+            return false;
         } else {
             log!(w, data, "thematic break", "end without match");
             return false
@@ -1310,7 +1309,7 @@ fn unordered_list(data: &mut impl ParserData) -> Option<Vec<Vec<Block>>> {
     log!(d, data, "unordered list", "begin");
 
     let marker = match data.peek() {
-        Some(c @ '*') | Some(c @ '-') | Some(c @ '+') => c,
+        Some(c @ ('*' | '-' | '+')) => c,
         _ => return None,
     };
 

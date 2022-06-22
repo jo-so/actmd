@@ -6,5 +6,5 @@ use common::*;
 
 par_check!(
     /// https://spec.commonmark.org/0.29/#insecure-characters
-    with_0, "`abc\0def`", code!("abc\u{fffd}def")
+    with_0, "`abc\0def`", code!(<1, 9> "abc\u{fffd}def")
 );

@@ -17,6 +17,7 @@ pub struct StringData<'a> {
 }
 
 impl<'a> StringData<'a> {
+    #[must_use]
     pub fn new(
         data: &'a str, settings: ParserSettings
     ) -> Self {

@@ -62,23 +62,23 @@ cm_par_check!(
 
 cm_par_check!(
     /// Derived from https://spec.commonmark.org/0.29/#example-333
-    t333b, "`\tb\t`", code!(/* TODO <1, 4>*/ "\tb\t")
+    t333b, "`\tb\t`", code!(<1, 4> "\tb\t")
 );
 
 cm_par_check!(
     /// Derived from https://spec.commonmark.org/0.29/#example-335
     t335b,
-    "``\r\nfoo\r\nbar  \r\nbaz\r\n``", code!("foo bar   baz")
+    "``\r\nfoo\r\nbar  \r\nbaz\r\n``", code!(<2, 21> "foo bar   baz")
 );
 
 cm_par_check!(
     /// Derived from https://spec.commonmark.org/0.29/#example-336
-    t336b, "``\r\nfoo \r\n``", code!("foo ")
+    t336b, "``\r\nfoo \r\n``", code!(<2, 10> "foo ")
 );
 
 cm_par_check!(
     /// Derived from https://spec.commonmark.org/0.29/#example-337
-    t337b, "`foo   bar \r\nbaz`", code!("foo   bar  baz")
+    t337b, "`foo   bar \r\nbaz`", code!(<1, 16> "foo   bar  baz")
 );
 
 par_check!(

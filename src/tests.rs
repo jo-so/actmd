@@ -1,7 +1,6 @@
 #![cfg(not(feature = "location"))]
 
 use crate::*;
-use crate::test_utils::*;
 use std::assert_matches::assert_matches;
 
 macro_rules! par_check {

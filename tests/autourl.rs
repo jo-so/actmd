@@ -22,13 +22,14 @@ par_check!(
 
 par_check!(
     short_scheme, "<xy://example.org>",
-    link!("xy://example.org", "", plain!(<1, 17> "xy://example.org"))
+    link!(<0, 0> "xy://example.org", "", plain!(<1, 17> "xy://example.org"))
 );
 
 par_check!(
     long_scheme,
     "<abcdefghijklmnopqrstuvwxyzABCDEF://example.org>",
     link!(
+        <0, 0>
         "abcdefghijklmnopqrstuvwxyzABCDEF://example.org",
         "",
         plain!(<1, 47> "abcdefghijklmnopqrstuvwxyzABCDEF://example.org")

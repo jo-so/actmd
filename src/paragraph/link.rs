@@ -23,7 +23,7 @@ fn is_segment_empty(par: &Paragraph, par_begin: usize, plain_begin: usize) -> bo
         return par.plain.len() == plain_begin;
     }
 
-    if let I::Plain(txt, _) = &par.list[par_begin] {
+    if let I::Text(txt, _) = &par.list[par_begin] {
         if txt.len() > plain_begin {
             return false;
         }
@@ -70,7 +70,7 @@ fn link_arg(data: &mut impl ParserData) -> Option<(String, String)> {
             data.skip_all(LINE_WS);
         }
     } else {
-        title = String::with_capacity(0);
+        title = String::new();
     }
 
     if data.skip(')') {
@@ -100,7 +100,7 @@ fn link_arg_url(data: &mut impl ParserData) -> Option<String> {
                 '\\' => {
                     let c = data.next()?;
                     if !c.is_ascii_punctuation() {
-                        url.push('\\')
+                        url.push('\\');
                     }
                     url.push(c);
                 }
@@ -124,17 +124,17 @@ fn link_arg_url(data: &mut impl ParserData) -> Option<String> {
                 if open_parentheses == 0 {
                     log!(t, data, "link url", "end");
                     return Some(url);
-                } else {
-                    open_parentheses -= 1;
-                    url.push(')');
-                    data.advance();
                 }
+
+                open_parentheses -= 1;
+                url.push(')');
+                data.advance();
             }
 
             Some('\\') => {
                 let c = data.next()?;
                 if !c.is_ascii_punctuation() {
-                    url.push('\\')
+                    url.push('\\');
                 }
                 url.push(c);
                 data.advance();
@@ -142,7 +142,7 @@ fn link_arg_url(data: &mut impl ParserData) -> Option<String> {
 
             Some('&') => html_entity(data, &mut url),
 
-            None | Some(' ') | Some('\t') | Some('\n') | Some('\r') => {
+            None | Some(' ' | '\t' | '\n' | '\r') => {
                 return if open_parentheses == 0 {
                     log!(t, data, "link url", "end");
                     Some(url)
@@ -169,11 +169,11 @@ fn link_arg_url(data: &mut impl ParserData) -> Option<String> {
 
 fn link_arg_title(data: &mut impl ParserData) -> Option<String> {
     let (left_del, right_del) = match data.peek() {
-        Some(del @ '\'') | Some(del @ '"') => (del, del),
+        Some(del @ ('\'' | '"')) => (del, del),
 
         Some('(') => ('(', ')'),
 
-        _ => return Some(String::with_capacity(0)),
+        _ => return Some(String::new()),
     };
 
     log!(d, data, "link title", "begin");
@@ -185,7 +185,7 @@ fn link_arg_title(data: &mut impl ParserData) -> Option<String> {
             '\\' => {
                 let c = data.next()?;
                 if !c.is_ascii_punctuation() {
-                    title.push('\\')
+                    title.push('\\');
                 }
                 title.push(c);
                 data.advance();
@@ -193,7 +193,7 @@ fn link_arg_title(data: &mut impl ParserData) -> Option<String> {
 
             '&' => html_entity(data, &mut title),
 
-            c @ '\r' | c @ '\n' => {
+            c @ ('\r' | '\n') => {
                 title.push(c);
                 data.advance();
 
@@ -216,13 +216,15 @@ fn link_arg_title(data: &mut impl ParserData) -> Option<String> {
 
                     log!(d, data, "link title", "end");
                     return Some(title);
-                } else if c == left_del {
+                }
+
+                if c == left_del {
                     log!(w, data, "link title", "end without match");
                     return None;
-                } else {
-                    title.push(c);
-                    data.advance();
                 }
+
+                title.push(c);
+                data.advance();
             }
         }
     }
@@ -269,6 +271,8 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
         });
     }
 
+    let loc = data.loc();
+
     if data.looking_at('(') {
         use Entity as E;
 
@@ -280,7 +284,7 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
                     par.push_plain(plain_end_loc);
                     let content = clip_segment(&mut par.list, pos, 2, None);
 
-                    par.push_no_plain(I::Image(content, url, title));
+                    par.push_no_plain(I::Image(content, url, title, data.loc_end(loc)));
 
                     cleanup_par(par, idx, false);
                     par.plain_begin = data.loc();
@@ -297,7 +301,7 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
                     par.push_plain(plain_end_loc);
                     let content = clip_segment(&mut par.list, pos, 1, None);
 
-                    par.push_no_plain(I::Link(content, url, title));
+                    par.push_no_plain(I::Link(content, url, title, data.loc_end(loc)));
                     par.open_brackets[idx] = E::NestedLink;
 
                     cleanup_par(par, idx, true);
@@ -326,7 +330,8 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
 
                 par.push_no_plain(I::ImageRef(
                     content,
-                    label.unwrap_or_else(|| String::with_capacity(0)),
+                    label.unwrap_or_default(),
+                    data.loc_end(loc),
                 ));
 
                 cleanup_par(par, idx, false);
@@ -334,9 +339,9 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
 
                 log!(d, data, "link end", "end with imageref");
                 return;
-            } else {
-                data.reset(before_label).unwrap();
             }
+
+            data.reset(before_label).unwrap();
         }
 
         Some((idx, Entity::Link(pos))) if !nested_link_found => {
@@ -352,7 +357,8 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
 
                 par.push_no_plain(I::LinkRef(
                     content,
-                    label.unwrap_or_else(|| String::with_capacity(0)),
+                    label.unwrap_or_default(),
+                    data.loc_end(loc),
                 ));
 
                 cleanup_par(par, idx, false);
@@ -360,9 +366,9 @@ pub(super) fn link_end(par: &mut Paragraph, data: &mut impl ParserData) {
 
                 log!(d, data, "link end", "end with linkref");
                 return;
-            } else {
-                data.reset(before_label).unwrap();
             }
+
+            data.reset(before_label).unwrap();
         }
 
         _ => (),
@@ -420,8 +426,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
         use Entity::*;
 
         let (start, end, delim_len) = match &par.open_brackets[start_idx] {
-            Emph(E::Start, start_delim, start_pos, start_len) |
-            Emph(E::Both, start_delim, start_pos, start_len) => {
+            Emph(E::Start | E::Both, start_delim, start_pos, start_len) => {
                 match &par.open_brackets[end_idx] {
                     Emph(E::End, del, pos, len) => {
                         assert_eq!(del, start_delim);
@@ -445,7 +450,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
 
         impl AsPlain for I {
             fn as_plain(&mut self) -> (&mut String, &mut Location) {
-                if let I::Plain(txt, loc) = self {
+                if let I::Text(txt, loc) = self {
                     (txt, loc)
                 } else {
                     unreachable!("Found {:?} instead of Plain", self);
@@ -464,7 +469,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                     begin: text_loc.begin + start.1 + delim_len,
                     end: text_loc.begin + end.1,
                 };
-                ct = vec![I::Plain(text[start.1 + delim_len..end.1].to_string(), loc)];
+                ct = vec![I::Text(text[start.1 + delim_len..end.1].to_string(), loc)];
 
                 text.replace_range(..end.1 + delim_len, "");
                 text_loc.begin = text_loc.begin + end.1 + delim_len;
@@ -478,7 +483,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                     begin: text_loc.begin + start.1 + delim_len,
                     end: text_loc.begin + end.1,
                 };
-                ct = vec![I::Plain(text[start.1 + delim_len..end.1].to_string(), loc)];
+                ct = vec![I::Text(text[start.1 + delim_len..end.1].to_string(), loc)];
 
                 if text.len() == end.1 + delim_len {
                     text.truncate(start.1);
@@ -489,7 +494,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                         begin: text_loc.begin + end.1 + delim_len,
                         end: text_loc.end,
                     };
-                    let new = I::Plain(text[end.1 + delim_len..].to_string(), loc);
+                    let new = I::Text(text[end.1 + delim_len..].to_string(), loc);
 
                     text.truncate(start.1);
                     text_loc.end = text_loc.begin + text.len();
@@ -503,16 +508,12 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                 let removed_len = end.1 + delim_len - 1;
 
                 for el in &mut par.open_brackets[end_idx + 1..] {
-                    match el {
-                        Entity::Emph(_, _, pos, _) => {
-                            if pos.0 > end.0 {
-                                break;
-                            }
-
-                            pos.1 -= removed_len;
+                    if let Entity::Emph(_, _, pos, _) = el {
+                        if pos.0 > end.0 {
+                            break;
                         }
 
-                        _ => (),
+                        pos.1 -= removed_len;
                     }
                 }
             }
@@ -537,7 +538,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                     begin: text_loc.begin,
                     end: text_loc.begin + end.1 - 1,
                 };
-                ct.push(I::Plain(text[..end.1 - 1].to_string(), loc));
+                ct.push(I::Text(text[..end.1 - 1].to_string(), loc));
 
                 text.replace_range(..end.1 - 1 + delim_len, "");
                 text_loc.begin = text_loc.begin + end.1 - 1 + delim_len;
@@ -546,16 +547,12 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
                     let removed_len = end.1 - 1 + delim_len;
 
                     for el in &mut par.open_brackets[end_idx_2 + 1..] {
-                        match el {
-                            Entity::Emph(_, _, pos, _) => {
-                                if pos.0 > end.0 {
-                                    break;
-                                }
-
-                                pos.1 -= removed_len;
+                        if let Entity::Emph(_, _, pos, _) = el {
+                            if pos.0 > end.0 {
+                                break;
                             }
 
-                            _ => (),
+                            pos.1 -= removed_len;
                         }
                     }
                 }
@@ -583,8 +580,8 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
         lowest_start = Some(start_idx);
     }
 
-    if matches!(par.list.last(), Some(I::Plain(..))) {
-        if let Some(I::Plain(plain, loc)) = par.list.pop() {
+    if matches!(par.list.last(), Some(I::Text(..))) {
+        if let Some(I::Text(plain, loc)) = par.list.pop() {
             assert!(par.plain.is_empty());
             par.plain_begin = loc.begin;
             par.plain = plain;
@@ -599,7 +596,7 @@ pub(super) fn emph_cleanup(par: &mut Paragraph, plain_begin: LocationPosition) {
         par.open_brackets.retain(|x| {
             i += 1;
             i < idx || !matches!(x, Entity::Emph(..))
-        })
+        });
     } else {
         unreachable!("The for loop should have been run at least once");
     }
@@ -640,6 +637,7 @@ pub fn linkdef(data: &mut impl ParserData) -> Option<Block> {
     let mut data = Transaction::new(data);
     log!(d, data, "link def", "begin");
 
+    let loc_begin = data.loc();
     let label = link_label(&mut data)?;
     if label.trim().is_empty() {
         return None;
@@ -648,8 +646,9 @@ pub fn linkdef(data: &mut impl ParserData) -> Option<Block> {
     let (url, title) = linkdef_arg(&mut data)?;
 
     log!(d, data, "link def", "end");
+    let loc = data.loc_end(loc_begin);
     data.commit();
-    Some(Block::LinkDef(label, url, title))
+    Some(Block::LinkDef(label, url, title, loc))
 }
 
 fn linkdef_arg(data: &mut impl ParserData) -> Option<(String, String)> {
@@ -681,13 +680,13 @@ fn linkdef_arg(data: &mut impl ParserData) -> Option<(String, String)> {
             Some((url, title))
         } else {
             data.reset(pos).unwrap();
-            Some((url, String::with_capacity(0)))
+            Some((url, String::new()))
         }
     } else {
         let title = if space_seen {
             link_arg_title(data)?
         } else {
-            String::with_capacity(0)
+            String::new()
         };
 
         if data.skip_newline() || data.peek().is_none() {

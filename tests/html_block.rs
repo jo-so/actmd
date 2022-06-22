@@ -58,6 +58,22 @@ body_check!(
     html_block!(<0, 39> "<div>\n> This is not a blockquote\n</div>\n")
 );
 
+body_check!(
+    h123456_starts_html,
+    "<h1>Text</h1>\n\n\
+     <h2>Text</h2>\n\n\
+     <h3>Text</h3>\n\n\
+     <h4>Text</h4>\n\n\
+     <h5>Text</h5>\n\n\
+     <h6>Text</h6>",
+    html_block!(<0, 14> "<h1>Text</h1>\n"),
+    html_block!(<15, 29> "<h2>Text</h2>\n"),
+    html_block!(<30, 44> "<h3>Text</h3>\n"),
+    html_block!(<45, 59> "<h4>Text</h4>\n"),
+    html_block!(<60, 74> "<h5>Text</h5>\n"),
+    html_block!(<75, 88> "<h6>Text</h6>\n")
+);
+
 mod nohtml {
     use super::*;
 
