@@ -585,7 +585,7 @@ pub(crate) fn embedded(data: &mut impl ParserData, foo: bool) -> Option<(Embedde
             data.skip_newline();
             data.skip_all(LINE_WS);
 
-            Some((Embedded::Block(String::from("//\n"), 0), data.loc_end(loc_begin)))
+            Some((Embedded::Block("//\n".into(), 0), data.loc_end(loc_begin)))
         }
 
         '/' => {

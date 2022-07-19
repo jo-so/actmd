@@ -701,7 +701,6 @@ const HTML_TAG_NAMES : &[&str] = &[
 fn html(
     data: &mut impl ParserData, indent: usize, list: &mut Vec<Block>, op_br: &mut u16
 ) -> bool {
-    #[inline]
     fn is_ascii_uppercase(ch: char) -> bool { char::is_ascii_uppercase(&ch) }
 
     fn finish_with_blank_line(

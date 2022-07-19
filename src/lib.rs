@@ -2,15 +2,13 @@
 
 use std::{
     convert::{Infallible, TryFrom},
+    fmt::{self, Display},
     fs,
     io,
-    ops::{Add, Sub},
+    ops::{Add, Deref, Sub},
     path::Path,
     str::FromStr,
 };
-
-#[cfg(feature = "location")]
-use std::fmt;
 
 mod block;
 pub use block::block;
@@ -243,7 +241,7 @@ pub struct Location {
 }
 
 #[cfg(feature = "location")]
-impl fmt::Display for Location {
+impl Display for Location {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}..{}", self.begin.0, self.end.0)
     }
@@ -378,61 +376,86 @@ pub enum Inline {
     EmbeddedExpr(String, Location),
 }
 
+/// String with all ASCII characters in lowercase
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Lcstr(Box<str>);
+
+impl From<&str> for Lcstr {
+    fn from(src: &str) -> Self {
+        Self(src.to_ascii_lowercase().into())
+    }
+}
+
+impl From<String> for Lcstr {
+    fn from(mut src: String) -> Self {
+        src.make_ascii_lowercase();
+        Self(src.into())
+    }
+}
+
+impl FromStr for Lcstr {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(s.into())
+    }
+}
+
+
+impl Deref for Lcstr {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for Lcstr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+pub type Head = Vec<(Lcstr, Box<str>)>;
+
 #[derive(Default)]
 pub struct Document {
     src: Box<str>,
-    head: Vec<(Box<str>, Box<str>)>,
+    head: Head,
     body: Vec<Block>,
 }
 
 impl Document {
     #[must_use]
-    pub fn parse_with(
-        src: impl Into<Box<str>>,
-        data: &mut impl ParserData,
-        mut header: Vec<(Box<str>, Box<str>)>
-    ) -> Self {
-        header.iter_mut().for_each(|(k, _)| k.make_ascii_lowercase());
-
-        head(data, &mut header);
-
+    pub fn parse(src: impl Into<Box<str>>, data: &mut impl ParserData) -> Self {
         Self {
             src: src.into(),
-            head: header,
+            head: head(data),
             body: body(data),
         }
-    }
-
-    #[must_use]
-    pub fn parse(src: impl Into<Box<str>>, data: &mut impl ParserData) -> Self {
-        Self::parse_with(src, data, Vec::new())
     }
 
     pub fn src(&self) -> &str {
         &self.src
     }
 
-    pub fn head(&self) -> &[(Box<str>, Box<str>)] {
+    pub fn head(&self) -> &[(Lcstr, Box<str>)] {
         self.head.as_slice()
     }
 
-    pub fn add_header(&mut self, key: impl Into<Box<str>>, value: impl Into<Box<str>>) {
-        let mut key = key.into();
-        let value = value.into();
-
-        key.make_ascii_lowercase();
-        self.head.push((key, value));
+    pub fn head_mut(&mut self) -> &mut Head {
+        &mut self.head
     }
 
-    pub fn head_retain(&mut self, f: impl FnMut(&(Box<str>, Box<str>)) -> bool) {
-        self.head.retain(f);
+    pub fn add_header(&mut self, key: impl Into<Lcstr>, value: impl Into<Box<str>>) {
+        self.head.push((key.into(), value.into()));
     }
 
-    pub fn last_head_val(&self, key: &str) -> Option<&str> {
-        debug_assert_eq!(key, key.to_ascii_lowercase());
+    pub fn last_head_val(&self, key: impl Into<Lcstr>) -> Option<&str> {
+        let key = key.into();
 
         self.head.iter()
-            .rfind(|(k, _)| &**k == key)
+            .rfind(|(k, _)| *k == key)
             .map(|(_, v)| &**v)
     }
 
@@ -467,7 +490,13 @@ impl TryFrom<&Path> for Document {
     }
 }
 
-pub fn head(data: &mut impl ParserData, header: &mut Vec<(Box<str>, Box<str>)>) {
+pub fn head(data: &mut impl ParserData) -> Head {
+    let mut header = Vec::new();
+    head_in(data, &mut header);
+    header
+}
+
+pub fn head_in(data: &mut impl ParserData, header: &mut Head) {
     fn not_newline(c: char) -> bool {
         c != '\r' && c != '\n'
     }
@@ -499,7 +528,7 @@ pub fn head(data: &mut impl ParserData, header: &mut Vec<(Box<str>, Box<str>)>) 
 
         if data.skip_newline() && data.skip_all(LINE_WS) == 0 {
             key.make_ascii_lowercase();
-            header.push((key.into_boxed_str(), "".into()));
+            header.push((key.into(), "".into()));
             continue;
         }
 
@@ -516,7 +545,7 @@ pub fn head(data: &mut impl ParserData, header: &mut Vec<(Box<str>, Box<str>)>) 
         }
 
         key.make_ascii_lowercase();
-        header.push((key.into_boxed_str(), val.into_boxed_str()));
+        header.push((key.into(), val.into_boxed_str()));
     }
 }
 

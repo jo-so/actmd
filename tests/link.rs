@@ -4,6 +4,77 @@
 mod common;
 use common::*;
 
+mod footnote_inline {
+    use super::*;
+
+    par_check!(
+        empty, "[][^]",
+        linkref!(<0, 0> "^", )
+    );
+
+    par_check!(
+        simple, "[Text][^]",
+        linkref!(<0, 0> "^", plain!(<1, 5> "Text"))
+    );
+
+    par_check!(
+        with_image, "[Text and ![an image](img.jpg)][^]",
+        linkref!(
+            <0, 0> "^",
+            plain!(<1, 5> "Text and "),
+            image!(<0, 0> "img.jpg", "", plain!(<0, 0> "an image"))
+        )
+    );
+
+    par_check!(
+        with_link, "[Text and [a link](/url)][^]",
+        linkref!(
+            <0, 0> "^",
+            plain!(<1, 5> "Text and "),
+            link!(<0, 0> "/url", "", plain!(<0, 0> "a link"))
+        )
+    );
+
+    par_check!(
+        with_footnote, "[A footnote[in a footnote][^]][^]",
+        linkref!(
+            <0, 0> "^",
+            plain!(<1, 5> "A footnote"),
+            linkref!(<0, 0> "^", plain!(<0, 0> "in a footnote"))
+        )
+    );
+}
+
+mod footnote_ref {
+    use super::*;
+
+    par_check!(
+        without_def, "[^fn]",
+        linkref!(<0, 0> "^fn",)
+    );
+
+    body_check!(
+        empty,
+        "Text[^fn]\n\n\
+         [^fn]:",
+
+        paragraph!(<0, 0> plain!(<0, 4> "Text"), linkref!(<0, 0> "^fn",)),
+        linkdef!(<0, 0> "^fn", "")
+    );
+
+    body_check!(
+        simple,
+        "Text[^fn]\n\n\
+         [^fn]: Footnote content",
+
+        paragraph!(<0, 0> plain!(<0, 4> "Text"), linkref!(<0, 0> "^fn",)),
+        linkdef!(
+            <0, 0> "^fn",
+            "" // paragraph!(<0, 0> plain!(<0, 0> "Footnote content"))
+        )
+    );
+}
+
 mod image {
     use super::*;
 

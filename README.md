@@ -6,15 +6,15 @@
 
 * `@{…}` ⇒ `Block(…)`
 * `@(…)` ⇒ `Expr(…)`
-* `@%{…}%` ⇒ `Block(%%…)` block comment
-* `@%…` ⇒ `Block(%…)` line comment
-* `@%\n *` ⇒ `Block(%"\\n ")` comment to remove newline
+* `@/*…*/` ⇒ `Block(/*…*/)` block comment
+* `@//…` ⇒ `Block(//…)` line comment
+* `@\n *` ⇒ `Block("//\\n ")` comment to remove newline
 * `@[ASCII punctuation]?…(…)` ⇒ `Expr([]…(…))`
 
 ### Rendering
 
-* `Block(%%…)` ⇒ `/*…*/\n`
-* `Block(%…)` ⇒ `//…\n`
+* `Block(/*…*/)` ⇒ `/*…*/\n`
+* `Block(//…)` ⇒ `//…\n`
 * `Block(…)` ⇒ `…\n`
 
 * `Expr(#…)` ⇒ `(…).write_to(out)?;`
@@ -24,8 +24,8 @@
 
 #### Examples
 
-* `@?deb("nginx")` ⇒ `deb(ctx, out, "nginx")?;`
-* `@?content()` ⇒ `content(ctx, out)?;`
+* `@deb("nginx")` ⇒ `deb(ctx, out, "nginx")?;`
+* `@content()` ⇒ `content(ctx, out)?;`
 
 ## Missing
 
