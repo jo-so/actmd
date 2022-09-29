@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_matches();
 
     let mut input = String::new();
-    if let Some(file) = args.value_of("file").map(|name| File::open(name)) {
+    if let Some(file) = args.get_one("file").map(|name: &&str| File::open(name)) {
         file?.read_to_string(&mut input)?;
     } else {
         io::stdin().read_to_string(&mut input)?;
