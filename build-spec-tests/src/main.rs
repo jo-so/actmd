@@ -594,7 +594,7 @@ fn space2tab(mut body: Vec<Block>) -> Vec<Block> {
             Block::Paragraph(par, _) => {
                 par.iter_mut().for_each(|e| {
                     match e {
-                        Inline::Code(txt) => *txt = txt.replace(' ', "\t"),
+                        Inline::Code(txt, _) => *txt = txt.replace(' ', "\t"),
                         _ => (),
                     }
                 })
@@ -694,40 +694,41 @@ fn main() -> anyhow::Result<()> {
              .short('s')
              .value_name("SKIP")
              .help("IDs of test cases not to build")
-             .takes_value(true)
+             .num_args(1)
         ).arg(clap::Arg::new("ignores")
               .short('i')
               .value_name("IGNORE")
               .help("List of tests to mark as ignore")
-              .takes_value(true)
+              .num_args(1)
         ).arg(clap::Arg::new("exception_mode")
               .short('x')
               .help("Print exception file format instead of tests")
+              .action(clap::ArgAction::SetTrue)
         ).arg(clap::Arg::new("spec")
               .value_name("INPUT")
               .help("File with CommonMark Spec")
-              .required(true)
+              .num_args(1)
         ).arg(clap::Arg::new("exceptions")
-                .value_name("ALT")
-                .help("File(s) with divergent output")
-                .multiple_values(true)
-                .multiple_occurrences(true)
+              .value_name("ALT")
+              .help("File(s) with divergent output")
+              .num_args(0..)
+              .action(clap::ArgAction::Set)
         ).get_matches();
 
-    let skip = build_skip_tester(args.value_of("skip"));
-    let ignore = args.value_of("ignores").map_or(
+    let skip = build_skip_tester(args.get_one::<String>("skip").map(|x| x.as_str()));
+    let ignore = args.get_one::<String>("ignores").map_or(
         HashSet::new(),
         |x| x.split(',').flat_map(|e| e.parse::<usize>()).collect()
     );
 
-    let exception_mode = args.is_present("exception_mode");
+    let exception_mode = args.get_flag("exception_mode");
     if !exception_mode {
         print_test_suite_prelude();
     }
 
     let mut exceptions : HashMap<_, Vec<_>> = HashMap::new();
 
-    if let Some(ex) = args.values_of("exceptions") {
+    if let Some(ex) = args.get_many::<String>("exceptions") {
         for fname in ex {
             for e in parse_file(fname)? {
                 let (kind, line, input, text) = e?;
@@ -743,7 +744,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let mut test_no = 0;
-    for e in parse_file(args.value_of("spec").unwrap())? {
+    for e in parse_file(args.get_one::<String>("spec").unwrap())? {
         let (kind, line, input, mut output) = e?;
         assert_eq!(kind, "example");
 
